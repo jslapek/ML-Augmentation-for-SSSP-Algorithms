@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Type
 import math
 
 from frontier import *
@@ -11,29 +11,48 @@ from heaps import *
 ######### Utilities ######### 
 #############################
 
+## Algorithm Output ##
+
 @dataclass 
 class AlgResults:
     distances: List[Float]
     predecessors: List[Optional[Vertex]]
 
+## Metrics ##
+
 @dataclass
 class BaseMetrics:
     edges_relaxed: int = 0
     queue_pops: int = 0
+    enqueues: int = 0
     # max_frontier_size: int = 0
     # come up with more metrics?
 
 @dataclass
 class BMSSPMetrics(BaseMetrics):
     block_pulls: int = 0
+    block_inserts: int = 0
+    batch_prepends: int = 0
     findpivot_rounds: int = 0
+    past_bound: int = 0
+    in_bound: int = 0
 
-##################################
-######### Abstract Class ######### 
-##################################
+## Init Config ##
+
+@dataclass
+class InitCfg():
+    pq_cls: Type = BinaryHeap
+    frontier_cls: Type = BlockFrontier
+
+######################################
+######### Abstract Algorithm ######### 
+######################################
 
 class SPAlgorithm(ABC):
     metrics: BaseMetrics
+
+    def __init__(self, cfg):
+        self.init_cfg = cfg
 
     def init_metrics(self):
         return BaseMetrics()
@@ -47,38 +66,71 @@ class SPAlgorithm(ABC):
 #################################################
 
 class Dijkstra(SPAlgorithm):
-    def __init__(self, pq):
-        self.pq = pq
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def init_metrics(self):
+        self.metrics = BaseMetrics()
 
     def search(self, graph, src):
-        ## call init_metrics
-        dist = { node: float('inf') for node in graph.nodes }
-        dist[src] = 0
-        keyNode = { 0 : [src] }
-        pq = self.pq
+        self.init_metrics()
+        n = graph.n
+        pq = self.init_cfg.pq_cls()
 
-        allKeys = []
-        pq.insert(0)
-        count = 0
+        dist: List[Float] = [float("inf")] * n
+        pred: List[Optional[Vertex]] = [None] * n
+
+        for s in src:
+            dist[s] = 0.0
+            self.metrics.enqueues += 1
+            pq.insert((0.0, s))
+        
+        seen: Set[Vertex] = set()
         while not pq.isEmpty():
-            current_distance = pq.extractMin()
-            current_node = keyNode[current_distance].pop()
-            if current_distance > dist[current_node]: continue
+            self.metrics.queue_pops += 1
+            d, u = pq.extractMin()
+            if d != dist[u] or u in seen:
+                continue
+            seen.add(u)
+            for v, w in graph.adj[u]:
+                self.metrics.edges_relaxed += 1
+                nd = d + w
+                if nd < dist[v]:
+                    dist[v] = nd
+                    pred[v] = u
+                    self.metrics.enqueues += 1
+                    pq.insert((nd, v))
 
-            for neighbour, attributes in graph[current_node].items():
-                count += 1
-                distance = attributes[0]["length"]
-                new_distance = current_distance + distance
+        return AlgResults(distances=dist, predecessors=pred)
+    # def search(self, graph, src):
+    #     ## call init_metrics
+    #     dist = { node: float('inf') for node in graph.nodes }
+    #     dist[src] = 0
+    #     keyNode = { 0 : [src] }
+    #     pq = self.pq
 
-                if new_distance < dist[neighbour]:
-                    dist[neighbour] = new_distance
-                    if new_distance not in keyNode:
-                        keyNode[new_distance] = []
+    #     allKeys = []
+    #     pq.insert(0)
+    #     count = 0
+    #     while not pq.isEmpty():
+    #         current_distance = pq.extractMin()
+    #         current_node = keyNode[current_distance].pop()
+    #         if current_distance > dist[current_node]: continue
+
+    #         for neighbour, attributes in graph[current_node].items():
+    #             count += 1
+    #             distance = attributes[0]["length"]
+    #             new_distance = current_distance + distance
+
+    #             if new_distance < dist[neighbour]:
+    #                 dist[neighbour] = new_distance
+    #                 if new_distance not in keyNode:
+    #                     keyNode[new_distance] = []
                     
-                    keyNode[new_distance].append(neighbour)
-                    pq.insert(new_distance)
-                    allKeys.append(new_distance)
-        return count
+    #                 keyNode[new_distance].append(neighbour)
+    #                 pq.insert(new_distance)
+    #                 allKeys.append(new_distance)
+    #     return count
 
 ###################################################
 ############# Bellman-Ford Algorithms #############
@@ -96,17 +148,16 @@ class BellmanFord(SPAlgorithm):
 #################################
 
 class BMSSP(SPAlgorithm):
-    # config
-    def __init__(self, frontier):
-        self.frontier_cls = frontier
+    def __init__(self, cfg):
+        super().__init__(cfg)
 
     def init_metrics(self):
-        return BMSSPMetrics()
+        self.metrics = BMSSPMetrics()
 
     def search(self, graph, src):
         ############ Initialisation ############ 
 
-        self.metrics = self.init_metrics()
+        self.init_metrics()
         self.sources = src
         self.G = graph
 
@@ -128,14 +179,15 @@ class BMSSP(SPAlgorithm):
         t = max(1, int(round(log2n ** (2.0 / 3.0))))
         k = max(1, min(k, t))
         # Cap to reasonable values to prevent runaway algorithms
-        k = min(k, 100)
-        t = min(t, 20)
+        # k = min(k, 100)
+        # t = min(t, 20)
         # else:
         #     k = max(1, min(self.cfg.k, 100))  # Safety cap
         #     t = max(1, min(self.cfg.t, 20))  # Safety cap
         self.k: int = k
         self.t: int = t
-        self.L: int = max(1, min(math.ceil(math.log2(n) / t), 10))  # Cap levels
+        # self.L: int = max(1, min(math.ceil(math.log2(n) / t), 10))  # Cap levels
+        self.L: int = max(1, math.ceil(math.log2(n) / t))  # Cap levels
 
         # # Best-clone cache for each original vertex after solve()
         # self._best_clone_for_orig: Optional[List[int]] = None
@@ -202,23 +254,27 @@ class BMSSP(SPAlgorithm):
         # if self.dhat[x] == math.inf:
         #     raise AlgorithmError("BaseCase requires a finite pivot distance.")
 
-        import heapq
+        # import heapq
 
         (x,) = tuple(S)
         U0: List[Vertex] = []
         seen: Set[Vertex] = set()
-        heap: List[Tuple[Float, Vertex]] = [(self.dhat[x], x)]
+        # heap: List[Tuple[Float, Vertex]] = [(self.dhat[x], x)]
+        heap = self.init_cfg.pq_cls()
+
+        self.metrics.enqueues += 1
+        heap.insert((self.dhat[x], x))
         in_heap: Set[Vertex] = {x}
 
         # Safety limits to prevent infinite loops
         iterations = 0
         max_iterations = min(self.k * 1000, self.G.n * 10)
 
-        while heap and len(U0) < self.k + 1 and iterations < max_iterations:
+        while not heap.isEmpty() and len(U0) < self.k + 1 and iterations < max_iterations:
             self.metrics.queue_pops += 1
             iterations += 1
 
-            du, u = heapq.heappop(heap)
+            du, u = heap.extractMin()
             in_heap.discard(u)
             if du != self.dhat[u] or u in seen:
                 continue
@@ -227,10 +283,15 @@ class BMSSP(SPAlgorithm):
             U0.append(u)
 
             for v, w in self.G.adj[u]:
-                if self._relax(u, v, w) and self.dhat[u] + w < B:
-                    if v not in in_heap:
-                        heapq.heappush(heap, (self.dhat[v], v))
-                        in_heap.add(v)
+                if self._relax(u, v, w):
+                    if self.dhat[u] + w < B:
+                        self.metrics.in_bound += 1
+                        if v not in in_heap:
+                            self.metrics.enqueues += 1
+                            heap.insert((self.dhat[v], v))
+                            in_heap.add(v)
+                    else:
+                        self.metrics.past_bound += 1
 
         # if iterations >= max_iterations:
         #     self.counters["iterations_protected"] += 1
@@ -275,8 +336,12 @@ class BMSSP(SPAlgorithm):
                     break
 
                 for v, w in self.G.adj[u]:
-                    if self._relax(u, v, w) and (self.dhat[u] + w < B):
-                        nxt.add(v)
+                    if self._relax(u, v, w):
+                        if (self.dhat[u] + w < B):
+                            self.metrics.in_bound += 1
+                            nxt.add(v)
+                        else:
+                            self.metrics.past_bound += 1
 
             if not nxt:
                 break
@@ -320,8 +385,9 @@ class BMSSP(SPAlgorithm):
 
     def _make_frontier(self, level: int, B: Float) -> AbstractFrontier:
         # Cap the frontier size to prevent excessive memory usage
-        M = max(1, min(2 ** ((level - 1) * self.t), 10000))
-        return self.frontier_cls(M=M, B=B)
+        # M = max(1, min(2 ** ((level - 1) * self.t), 10000))
+        M = max(1, 2 ** ((level - 1) * self.t))
+        return self.init_cfg.frontier_cls(M=M, B=B)
 
         # if self.cfg.frontier == "heap":
         #     return HeapFrontier(M=M, B=B)
@@ -342,14 +408,15 @@ class BMSSP(SPAlgorithm):
         P, W = self._find_pivots(B, S)
         D = self._make_frontier(level, B)
         for x in P:
+            self.metrics.block_inserts += 1
             D.insert(x, self.dhat[x])
 
         U_accum: Set[Vertex] = set()
         cap = min(self.k * max(1, 2 ** (level * self.t)), self.G.n)  # Cap to graph size
         pull_iterations = 0
-        max_pull_iterations = min(cap * 10, 1000)  # Safety limit on pulls
+        # max_pull_iterations = min(cap * 10, 1000)  # Safety limit on pulls
 
-        while len(U_accum) < cap and pull_iterations < max_pull_iterations:
+        while len(U_accum) < cap:  # and pull_iterations < max_pull_iterations:
             self.metrics.block_pulls += 1
             pull_iterations += 1
 
@@ -373,12 +440,14 @@ class BMSSP(SPAlgorithm):
                     if self._relax(u, v, w):
                         val = du + w
                         if B_i <= val < B:
+                            self.metrics.block_inserts += 1
                             D.insert(v, val)
                         elif B_i_prime <= val < B_i:
                             K_pairs.append((v, val))
 
             extra_pairs = [(x, self.dhat[x]) for x in S_i if B_i_prime <= self.dhat[x] < B_i]
             if K_pairs or extra_pairs:
+                self.metrics.batch_prepends += 1
                 D.batch_prepend(K_pairs + extra_pairs)
 
             if len(U_accum) >= cap:

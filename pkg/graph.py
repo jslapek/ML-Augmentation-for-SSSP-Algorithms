@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple, Set
 
 # from .exceptions import GraphFormatError, InputError
 
@@ -106,6 +106,48 @@ class Graph:
         import random
         rnd = random.Random(seed)
         return rnd.sample(range(self.n), samples)
+
+    # ...existing code...
+    @classmethod
+    def random_graph_bounded(cls, n: int, m: int, k: int, seed: int):
+        """Generate random graph with n vertices, m edges, and out-degree(u) <= k for all u.
+
+        Raises ValueError if m is infeasible (m > n * min(k, n-1)).
+        """
+        import numpy as np
+
+        if k < 0:
+            raise ValueError("k must be non-negative")
+        cap = min(k, max(0, n - 1))
+        total_slots = n * cap
+        if m > total_slots:
+            raise ValueError(f"cannot generate {m} edges with max out-degree {k} on {n} vertices (max {total_slots})")
+
+        if m == 0:
+            return Graph.from_edges(n, [])
+
+        rng = np.random.default_rng(seed)
+        # sample m distinct tail slots (fast, in C)
+        slots = rng.choice(total_slots, size=m, replace=False)
+        tails = slots // cap
+        deg = np.bincount(tails, minlength=n)
+
+        edges: List[Tuple[int, int, float]] = []
+        # For each vertex sample deg[u] distinct heads using NumPy (C speed).
+        for u in range(n):
+            s = int(deg[u])
+            if s == 0:
+                continue
+            # draw s indices from 0..n-2 and map to skip u
+            choices = rng.choice(n - 1, size=s, replace=False)
+            # vectorized map to heads
+            heads = choices.copy()
+            heads[heads >= u] += 1
+            weights = rng.random(size=s) * 10.0
+            for v, w in zip(heads.tolist(), weights.tolist()):
+                edges.append((u, int(v), float(w)))
+
+        return Graph.from_edges(n, edges)
 
     def constant_outdegree_transform(self, delta: int) -> Tuple[Graph, Dict[Vertex, List[Vertex]]]:
         """Split vertices so that every vertex has out-degree at most ``delta``.

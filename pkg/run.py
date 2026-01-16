@@ -10,16 +10,16 @@ from graph import *
 
 @dataclass
 class RunConfig:
-    alg: str = "bmssp"
+    alg: str = "dijkstra"
     heap: str = "binary"
     frontier: str = "block"
 
     graph: str = "random"
     seed: int = 5
     n: int = 100_000
-    m: int = 1_000_000
-    transform: bool = True
-    transform_delta = 10
+    m: int = 200_000
+    transform: bool = False
+    transform_delta: int = 4
 
     niters: int = 5
     nsources: int = 1
@@ -37,16 +37,18 @@ def runSearch(cfg: RunConfig):
                       "block": BlockFrontier }
 
     # instantiate run parameters
-    conv_graph = { "random": lambda : Graph.random_graph(n=cfg.n, m=cfg.m, seed=cfg.seed) }
+    print("Generating graph...")
+    conv_graph = { "random": lambda : Graph.random_graph_bounded(n=cfg.n, m=cfg.m, k=cfg.transform_delta, seed=cfg.seed) }
 
     G = conv_graph[cfg.graph]()
     if cfg.transform: 
         print("Performing transformation...")
         G = G.constant_outdegree_transform(cfg.transform_delta)[0]
+        print(f"Finised transformation. Now {G.n} nodes.")
 
-    alg = conv_alg[cfg.alg](
-        frontier=conv_frontier[cfg.frontier]
-    )
+    alg_cfg = InitCfg( frontier_cls = conv_frontier[cfg.frontier],
+                       pq_cls       = conv_heap[cfg.heap] )
+    alg = conv_alg[cfg.alg](alg_cfg)
 
     # run simulations
     out = []
@@ -101,4 +103,4 @@ def runSearch(cfg: RunConfig):
 
 # runSearch()
 
-print(runSearch(RunConfig()))
+print([x[1] for x in runSearch(RunConfig())])
