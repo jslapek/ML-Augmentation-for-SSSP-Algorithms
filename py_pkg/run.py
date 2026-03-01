@@ -10,14 +10,14 @@ from graph import *
 
 @dataclass
 class RunConfig:
-    alg: str = "dijkstra"
+    alg: str = "bf"
     heap: str = "binary"
     frontier: str = "block"
 
     graph: str = "random"
-    seed: int = 5
-    n: int = 100_000
-    m: int = 200_000
+    seed: int = 42
+    n: int = 100
+    m: int = 200
     transform: bool = False
     transform_delta: int = 4
 
@@ -103,4 +103,4 @@ def runSearch(cfg: RunConfig):
 
 # runSearch()
 
-print([x[1] for x in runSearch(RunConfig())])
+# print([x[1] for x in runSearch(RunConfig())])

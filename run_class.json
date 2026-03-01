@@ -1,0 +1,13 @@
+{
+  "alg": "bmssp",
+  "heap": "binary",
+  "frontier": "block",
+  "graph": "random",
+  "seed": 42,
+  "n": 1000,
+  "m": 4000,
+  "transform": false,
+  "transform_delta": 4,
+  "niters": 10,
+  "nsources": 1
+}

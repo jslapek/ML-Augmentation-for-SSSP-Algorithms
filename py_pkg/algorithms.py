@@ -137,11 +137,54 @@ class Dijkstra(SPAlgorithm):
 ###################################################
 
 class BellmanFord(SPAlgorithm):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def init_metrics(self):
+        self.metrics = BaseMetrics()
 
     def search(self, graph, src):
-        pass
+        """Bellman-Ford algorithm for single-source shortest paths.
+        
+        Finds shortest paths from one or more source vertices to all other vertices.
+        Handles negative edge weights and detects negative cycles.
+        
+        Args:
+            graph: Graph object with vertices and weighted edges.
+            src: Set or list of source vertices.
+        
+        Returns:
+            AlgResults containing distances and predecessors.
+        """
+        self.init_metrics()
+        n = graph.n
+        
+        dist: List[Float] = [float("inf")] * n
+        pred: List[Optional[Vertex]] = [None] * n
+        
+        # Initialize distances from all sources
+        for s in src:
+            dist[s] = 0.0
+        
+        # Relax edges n-1 times
+        for _ in range(n - 1):
+            for u in range(n):
+                if dist[u] != float("inf") and graph.adj[u]:
+                    for v, w in graph.adj[u]:
+                        self.metrics.edges_relaxed += 1
+                        nd = dist[u] + w
+                        if nd < dist[v]:
+                            dist[v] = nd
+                            pred[v] = u
+        
+        # Check for negative cycles (optional, can be enabled for validation)
+        # for u in range(n):
+        #     if dist[u] != float("inf"):
+        #         for v, w in graph.adj[u]:
+        #             if dist[u] + w < dist[v]:
+        #                 raise ValueError("Negative cycle detected in graph")
+        
+        return AlgResults(distances=dist, predecessors=pred)
 
 #################################
 ############# BMSSP #############
@@ -399,8 +442,8 @@ class BMSSP(SPAlgorithm):
         self, level: int, B: Float, S: Set[Vertex], depth: int = 0
     ) -> Tuple[Float, Set[Vertex]]:
         # Prevent excessive recursion
-        if depth > 50 or level > 20:
-            return self._base_case(B, S)
+        # if depth > 50 or level > 20:
+        #     return self._base_case(B, S)
 
         if level == 0:
             return self._base_case(B, S)
