@@ -1,0 +1,54 @@
+# C / C++ source
+*.c     text eol=lf
+*.cc    text eol=lf
+*.cpp   text eol=lf
+*.cxx   text eol=lf
+*.h     text eol=lf
+*.hh    text eol=lf
+*.hpp   text eol=lf
+*.hxx   text eol=lf
+*.ipp   text eol=lf
+
+# Scripts
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.py    text eol=lf
+*.R     text eol=lf
+*.r     text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# Windows-specific scripts
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Build files
+Makefile     text eol=lf
+CMakeLists.txt text eol=lf
+*.cmake      text eol=lf
+
+# TeX / bibliography, if relevant
+*.tex   text eol=lf
+*.bib   text eol=lf
+
+# Images / binary files
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.7z    binary
+*.exe   binary
+*.dll   binary
+*.so    binary
+*.a     binary
+*.lib   binary
+*.o     binary
+*.obj   binary
