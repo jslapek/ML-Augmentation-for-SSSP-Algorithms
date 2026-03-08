@@ -1,0 +1,10 @@
+timer.start();
+auto it_UB_block = UBs.lower_bound({b,it_min});
+auto [ub,it_block] = (*it_UB_block);
+int r = randomBit(acc_insert);
+timer.stop();
+if (r) {
+    insert_offset += timer.elapsed_ms();
+} else {
+    snip_lower_bound += timer.elapsed_ms();
+}
