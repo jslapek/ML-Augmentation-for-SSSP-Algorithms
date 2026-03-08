@@ -1,7 +1,25 @@
 #include "bmssp.hpp"
 #include "utils.hpp"
 
-namespace spp_timed {
+
+
+namespace spp_ml_theory {
+
+inline double acc_bound = 1.0;
+inline double acc_pivot = 1.0;
+inline double acc_insert = 1.0;
+
+void set_acc_bound(double x){
+    acc_bound = x;
+}
+
+void set_acc_pivot(double x){
+    acc_pivot = x;
+}
+
+void set_acc_insert(double x){
+    acc_insert = x;
+}
 
 template<typename uniqueDistT>
 class batchPQ { // batch priority queue
@@ -34,7 +52,7 @@ public:
     double snip_block_insertion = 0.0;
     double snip_membership_check = 0.0;
     double snip_deletion = 0.0;
-    bool time_delete = false;
+    double insert_offset = 0.0;
 
     batchPQ(int n): actual_value(n), where_is0(n), where_is1(n){} // O(n)
 
@@ -49,7 +67,7 @@ public:
         snip_block_insertion = 0.0;
         snip_membership_check = 0.0;
         snip_deletion = 0.0;
-        time_delete = false;
+        insert_offset = 0.0;
 
         actual_value.clear();
         where_is0.clear(); where_is1.clear();
@@ -71,18 +89,23 @@ public:
         snip_membership_check += timer.elapsed_ms();
     
         if(exist && it_exist->second > b){
-            time_delete = true;
             delete_(x);
         }else if(exist){
             return;
         }
         
         // Searching for the first block with UB which is > 
+
         timer.start();
         auto it_UB_block = UBs.lower_bound({b,it_min});
         auto [ub,it_block] = (*it_UB_block);
+        int r = randomBit(acc_insert);
         timer.stop();
-        snip_lower_bound += timer.elapsed_ms();
+        if (r) {
+            insert_offset += timer.elapsed_ms();
+        } else {
+            snip_lower_bound += timer.elapsed_ms();
+        }
         
         // Inserting key/value (a,b)
         timer.start();
@@ -109,7 +132,6 @@ public:
     }
 
     std::pair<uniqueDistT, std::vector<int>> pull(){ // O(M)
-        time_delete = false;
         std::vector<elementT> s0,s1;
         s0.reserve(2 * M); s1.reserve(M);
     
@@ -155,15 +177,15 @@ public:
         }
     }
     inline void erase(int key) {
-        if(actual_value.find(key) != actual_value.end()) {
-            time_delete = true;
+        timerT timer;
+        if(actual_value.find(key) != actual_value.end())
             delete_({-1, -1, key, -1});
-        }
+        timer.stop();
+        snip_deletion += timer.elapsed_ms();
     }
     
 private:
     void delete_(uniqueDistT x){    
-        timerT timer;
         int a = get<2>(x);
         uniqueDistT b = actual_value[a];
         
@@ -175,14 +197,16 @@ private:
             where_is1.erase(a);
     
             if((*it_block).size() == 0){
-                timer.stop();
-                if (time_delete) snip_deletion += timer.elapsed_ms();
-                timer.start();
+                timerT timer;
                 auto it_UB_block = UBs.lower_bound({b,it_block});  
+                int r = randomBit(acc_insert);
                 timer.stop();
-                if (time_delete) snip_lower_bound += timer.elapsed_ms();
+                if (r) {
+                    insert_offset += timer.elapsed_ms();
+                } else {
+                    snip_lower_bound += timer.elapsed_ms();
+                }
 
-                timer.start();
                 if((*it_UB_block).first != B){
                     UBs.erase(it_UB_block);
                     D1.erase(it_block);
@@ -197,8 +221,6 @@ private:
     
         actual_value.erase(a);
         size_--;
-        timer.stop();
-        if (time_delete) snip_deletion += timer.elapsed_ms();
     }
     
     uniqueDistT selectKth(std::vector<elementT> &v, int k) {
@@ -242,12 +264,17 @@ private:
         timer.stop();
         snip_split += timer.elapsed_ms();
 
+
         timer.start();
         auto it_lb = UBs.lower_bound({UB1,it_min});
         auto [UB2,aux] = (*it_lb);
+        int r = randomBit(acc_insert);
         timer.stop();
-        snip_lower_bound += timer.elapsed_ms();
-
+        if (r) {
+            insert_offset += timer.elapsed_ms();
+        } else {
+            snip_lower_bound += timer.elapsed_ms();
+        }
         
         timer.start();
         UBs.insert({UB1,it_block});
@@ -273,7 +300,6 @@ private:
                 int exist = (it != actual_value.end()); 
     
                 if(exist && it->second > x.second){
-                    time_delete = false;
                     delete_(x.second);
                 }else if(exist){
                     continue;
@@ -716,8 +742,16 @@ private:
         stats.snip_block_insertion += D.snip_block_insertion;
         stats.snip_membership_check += D.snip_membership_check;
         stats.snip_deletion += D.snip_deletion;
+
+        stats.time_full -= D.insert_offset;
+        stats.time_D_op -= D.insert_offset;
         
         return {retB, complete};
     }
 };
+
+
+
+
+
 }

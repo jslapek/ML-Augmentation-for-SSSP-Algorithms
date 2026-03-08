@@ -1,7 +1,11 @@
 #include "bmssp.hpp"
 #include "utils.hpp"
 
-namespace spp_timed {
+// https://chatgpt.com/c/69a9555d-1040-838e-9b5b-93d97750488b
+
+#include "../structures/alex_map.h"
+
+namespace spp_learned_index {
 
 template<typename uniqueDistT>
 class batchPQ { // batch priority queue
@@ -29,12 +33,6 @@ class batchPQ { // batch priority queue
     hash_map<int, std::pair<typename std::list<std::list<elementT>>::iterator, typename std::list<elementT>::iterator>> where_is0, where_is1;
     
 public:
-    double snip_split = 0.0;
-    double snip_lower_bound = 0.0;
-    double snip_block_insertion = 0.0;
-    double snip_membership_check = 0.0;
-    double snip_deletion = 0.0;
-    bool time_delete = false;
 
     batchPQ(int n): actual_value(n), where_is0(n), where_is1(n){} // O(n)
 
@@ -44,12 +42,6 @@ public:
         D1 = {std::list<elementT>()};
         UBs = {make_pair(B_,D1.begin())};
         size_ = 0;
-        snip_split = 0.0;
-        snip_lower_bound = 0.0;
-        snip_block_insertion = 0.0;
-        snip_membership_check = 0.0;
-        snip_deletion = 0.0;
-        time_delete = false;
 
         actual_value.clear();
         where_is0.clear(); where_is1.clear();
@@ -64,33 +56,23 @@ public:
         int a = get<2>(b);
     
         // checking if exists
-        timerT timer;
         auto it_exist = actual_value.find(a);
         int exist = (it_exist != actual_value.end()); 
-        timer.stop();
-        snip_membership_check += timer.elapsed_ms();
     
         if(exist && it_exist->second > b){
-            time_delete = true;
             delete_(x);
         }else if(exist){
             return;
         }
         
         // Searching for the first block with UB which is > 
-        timer.start();
         auto it_UB_block = UBs.lower_bound({b,it_min});
         auto [ub,it_block] = (*it_UB_block);
-        timer.stop();
-        snip_lower_bound += timer.elapsed_ms();
         
         // Inserting key/value (a,b)
-        timer.start();
         auto it = it_block->insert(it_block->end(),{a,b});
         where_is1[a] = {it_block, it};
         actual_value[a] = b;
-        timer.stop();
-        snip_block_insertion += timer.elapsed_ms();
     
         size_++;
     
@@ -109,7 +91,6 @@ public:
     }
 
     std::pair<uniqueDistT, std::vector<int>> pull(){ // O(M)
-        time_delete = false;
         std::vector<elementT> s0,s1;
         s0.reserve(2 * M); s1.reserve(M);
     
@@ -155,15 +136,12 @@ public:
         }
     }
     inline void erase(int key) {
-        if(actual_value.find(key) != actual_value.end()) {
-            time_delete = true;
+        if(actual_value.find(key) != actual_value.end())
             delete_({-1, -1, key, -1});
-        }
     }
     
 private:
     void delete_(uniqueDistT x){    
-        timerT timer;
         int a = get<2>(x);
         uniqueDistT b = actual_value[a];
         
@@ -175,14 +153,8 @@ private:
             where_is1.erase(a);
     
             if((*it_block).size() == 0){
-                timer.stop();
-                if (time_delete) snip_deletion += timer.elapsed_ms();
-                timer.start();
                 auto it_UB_block = UBs.lower_bound({b,it_block});  
-                timer.stop();
-                if (time_delete) snip_lower_bound += timer.elapsed_ms();
-
-                timer.start();
+                
                 if((*it_UB_block).first != B){
                     UBs.erase(it_UB_block);
                     D1.erase(it_block);
@@ -197,8 +169,6 @@ private:
     
         actual_value.erase(a);
         size_--;
-        timer.stop();
-        if (time_delete) snip_deletion += timer.elapsed_ms();
     }
     
     uniqueDistT selectKth(std::vector<elementT> &v, int k) {
@@ -211,7 +181,6 @@ private:
 
         
     void split(std::list<std::list<elementT>>::iterator it_block){ // O(M) + O(lg(Block Numbers))
-        timerT timer;
         int sz = (*it_block).size();
         
         std::vector<elementT> v((*it_block).begin() , (*it_block).end());
@@ -239,24 +208,13 @@ private:
         // Updating UBs   
         // O(lg(Block Numbers))
         uniqueDistT UB1 = {get<0>(med),get<1>(med),get<2>(med),get<3>(med)-1};
-        timer.stop();
-        snip_split += timer.elapsed_ms();
-
-        timer.start();
         auto it_lb = UBs.lower_bound({UB1,it_min});
         auto [UB2,aux] = (*it_lb);
-        timer.stop();
-        snip_lower_bound += timer.elapsed_ms();
-
         
-        timer.start();
         UBs.insert({UB1,it_block});
         UBs.insert({UB2,new_block});
         
         UBs.erase(it_lb);
-        timer.stop();
-        snip_split += timer.elapsed_ms();
-
     }
     
     void batchPrepend(const std::list<elementT> &l) { // O(|l| log(|l|/M) ) 
@@ -273,7 +231,6 @@ private:
                 int exist = (it != actual_value.end()); 
     
                 if(exist && it->second > x.second){
-                    time_delete = false;
                     delete_(x.second);
                 }else if(exist){
                     continue;
@@ -307,8 +264,6 @@ private:
         batchPrepend(less);
     }
 };
-
-//////////////////////////////////////////////////////
 
 template<typename wT>
 class bmssp { 
@@ -711,12 +666,6 @@ private:
             complete.push_back(x); // this get the completed vertices from bellman-ford, it has P in it as well
         }
         // get only the ones not in complete already, for it to become disjoint
-        stats.snip_lower_bound += D.snip_lower_bound;
-        stats.snip_split += D.snip_split;
-        stats.snip_block_insertion += D.snip_block_insertion;
-        stats.snip_membership_check += D.snip_membership_check;
-        stats.snip_deletion += D.snip_deletion;
-        
         return {retB, complete};
     }
 };
