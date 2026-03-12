@@ -7,6 +7,7 @@ using namespace Rcpp;
 #include "algs/bmssp.hpp"
 #include "algs/bmssp_timed.hpp"
 #include "algs/bmssp_ml_theory.hpp"
+#include "algs/dijkstra.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -16,7 +17,7 @@ using json = nlohmann::json;
 namespace fs = std::filesystem;
 
 using distT = long long;
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Stats, time_full, time_find_pivot, time_base_case, time_D_op, time_bmssp, time_batch_prepend, snip_split, snip_lower_bound, snip_block_insertion, snip_membership_check, snip_deletion)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Stats, time_full, time_find_pivot, time_base_case, time_D_op, time_bmssp, time_batch_prepend, snip_split, snip_lower_bound, snip_block_insertion, snip_membership_check, snip_deletion, snip_tree_construction, snip_relaxation)
 
 static bool is_number(const std::string& s) {
     if (s.empty()) return false;
@@ -59,6 +60,7 @@ std::map<long long, std::vector<std::string>> list_graphs_in_order(const std::st
     return size_to_graphs;
 }
 
+
 // [[Rcpp::export]]
 std::string runSearch() {
   std::ifstream f("run_class.json");
@@ -78,7 +80,13 @@ std::string runSearch() {
     for (std::size_t i = 0; i < gs.size(); ++i) {
       std::cout << "Processing graph: " << fs::path(gs[i]).filename().string() << "\n";
       auto [adj, m] = readGraph<distT>(gs[i]);
-      spp_timed::bmssp<distT> bmssp(adj);
+
+      spp::dijkstra<distT> dijkstra(adj);
+      auto [d_d, p_d] = dijkstra.execute(0);
+      distT max_dist = *std::max_element(d_d.begin(), d_d.end());
+      std::cout << "maximum distance: " << max_dist << "\n";
+
+      spp_ml_theory::bmssp<distT> bmssp(adj);
       bmssp.prepare_graph(false);
       int source = 0;
 

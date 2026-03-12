@@ -8,6 +8,7 @@ namespace spp_ml_theory {
 inline double acc_bound = 1.0;
 inline double acc_pivot = 1.0;
 inline double acc_insert = 1.0;
+inline double use_bound_pred = true;
 
 void set_acc_bound(double x){
     acc_bound = x;
@@ -19,6 +20,10 @@ void set_acc_pivot(double x){
 
 void set_acc_insert(double x){
     acc_insert = x;
+}
+
+void set_use_bound_pred(bool x){
+    use_bound_pred = x;
 }
 
 template<typename uniqueDistT>
@@ -52,6 +57,7 @@ public:
     double snip_block_insertion = 0.0;
     double snip_membership_check = 0.0;
     double snip_deletion = 0.0;
+    double insert_offset = 0.0;
     bool time_delete = false;
 
     batchPQ(int n): actual_value(n), where_is0(n), where_is1(n){} // O(n)
@@ -67,6 +73,7 @@ public:
         snip_block_insertion = 0.0;
         snip_membership_check = 0.0;
         snip_deletion = 0.0;
+        insert_offset = 0.0;
         time_delete = false;
 
         actual_value.clear();
@@ -582,6 +589,7 @@ private:
     int counter_pivot = 0;
     std::vector<int> pivot_vis;
     std::pair<std::vector<int>, std::vector<int>> findPivots(uniqueDistT B, const std::vector<int> &S) { // Algorithm 1
+        timerT timer;
         counter_pivot++;
 
         std::vector<int> vis;
@@ -600,11 +608,14 @@ private:
             for(int u: active) {
                 for(auto [v, w]: adj[u]) {
                     if(getDist(u, v, w) <= getDist(v)) {
+                        timer.start();
                         updateDist(u, v, w);
                         if(getDist(v) < B) {
                             root[v] = root[u];
                             nw_active.push_back(v);
                         }
+                        timer.stop();
+                        stats.snip_relaxation += timer.elapsed_ms();
                     }
                 }
             }
@@ -620,11 +631,15 @@ private:
             active = move(nw_active);
         }
 
+        timer.start();
         std::vector<int> P;
         P.reserve(vis.size() / k);
         for(int u: vis) treesz[root[u]]++;
         for(int u: S) if(treesz[u] >= k) P.push_back(u);
-        
+
+        // int r = randomBit(acc_pivot);
+        timer.stop();
+        stats.snip_tree_construction += timer.elapsed_ms();
         // assert(P.size() <= vis.size() / k);
         return {P, vis};
     }

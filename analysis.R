@@ -209,12 +209,88 @@ plot_d_insert_times <- function() {
   ggsave(filename = "figures/plot.pdf", plot = plt, width = 8, height = 6)
 }
 
+plot_pivot <- function() {
+  x <- read_json()
+  stats <- dir_stats(x)
+  
+  means_df <- data.frame(
+  directory = names(stats),
+  do.call(rbind, lapply(stats, `[[`, "mean")),
+  row.names = NULL,
+  check.names = FALSE
+) %>%
+  mutate(directory = as.numeric(directory)) %>%
+  arrange(directory) %>%
+  mutate(across(
+    c(time_find_pivot, snip_tree_construction, snip_relaxation),
+    ~ . / time_find_pivot
+  )) %>%
+  mutate(
+    time_find_pivot = time_find_pivot - snip_tree_construction - snip_relaxation
+  )
+  
+
+  parts_long <- means_df %>%
+  select(directory, time_find_pivot, snip_tree_construction, snip_relaxation) %>%
+
+  pivot_longer(-directory, names_to = "part", values_to = "frac") %>%
+  mutate(part = factor(
+    part,
+    levels = c("time_find_pivot", "snip_tree_construction", "snip_relaxation")
+  ))
+
+  parts_long <- parts_long %>%
+  mutate(part = recode(part,
+    time_find_pivot    = "Bellman-Ford Exploration",
+    snip_tree_construction = "Tree Construction",
+    snip_relaxation = "Relaxation Overhead"
+  ))
+
+  total_df <- means_df %>% select(directory, time_find_pivot)
+
+  # evenly spaced x positions
+  x_levels <- sort(unique(parts_long$directory))
+  parts_long <- parts_long %>%
+    mutate(xpos = match(directory, x_levels))
+
+  # labels as 2^k (if your x_levels are powers of 2)
+  x_labs <- scales::label_math(expr = 2^.x)(log2(x_levels))
+  # if you want integer exponents only:
+  # x_labs <- scales::label_math(expr = 2^.x)(round(log2(x_levels)))
+
+  plt <- ggplot(parts_long, aes(x = xpos, y = frac, fill = part)) +
+    geom_area(position = "stack", alpha = 0.85) +
+    scale_x_continuous(
+      breaks = seq_along(x_levels),
+      labels = x_labs
+    ) +
+    labs(x = "Graph Size (n)", y = "Mean Running Time (%)", fill = "Component") +
+    scale_fill_manual(
+      values = c(
+        "Bellman-Ford Exploration" = "#0084b3",
+        "Relaxation Overhead" = "#ffb300",
+        "Tree Construction" = "grey"
+      ),
+      name = "Component"
+    ) +
+    theme_minimal()
+    
+
+  ggsave(filename = "figures/plot.pdf", plot = plt, width = 8, height = 6)
+}
+
 ######### Main ##########
 
+#### change algorithm config / graph
 # write_cfg()
+
+### run algorithm
 runSearch()
+
+### plot results
 # plot_mean_times()
-plot_d_insert_times()
+# plot_d_insert_times()
+plot_pivot()
 
 
 ######### OLD PYTHON ##########

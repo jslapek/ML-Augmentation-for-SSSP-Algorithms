@@ -24,6 +24,10 @@ struct Stats {
   double time_bmssp = 0;
   double time_batch_prepend = 0;
 
+  // FindPivots
+  double snip_tree_construction = 0.0;
+  double snip_relaxation = 0.0;
+
   // BatchPQ insertion snippets
   double snip_split = 0;
   double snip_lower_bound = 0;

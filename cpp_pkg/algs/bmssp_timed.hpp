@@ -584,10 +584,13 @@ private:
             active = move(nw_active);
         }
 
+        timerT timer;
         std::vector<int> P;
         P.reserve(vis.size() / k);
         for(int u: vis) treesz[root[u]]++;
         for(int u: S) if(treesz[u] >= k) P.push_back(u);
+        timer.stop();
+        stats.snip_tree_construction += timer.elapsed_ms();
         
         // assert(P.size() <= vis.size() / k);
         return {P, vis};
