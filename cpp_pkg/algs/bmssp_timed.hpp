@@ -546,6 +546,7 @@ private:
     int counter_pivot = 0;
     std::vector<int> pivot_vis;
     std::pair<std::vector<int>, std::vector<int>> findPivots(uniqueDistT B, const std::vector<int> &S) { // Algorithm 1
+        timerT timer;
         counter_pivot++;
 
         std::vector<int> vis;
@@ -564,11 +565,14 @@ private:
             for(int u: active) {
                 for(auto [v, w]: adj[u]) {
                     if(getDist(u, v, w) <= getDist(v)) {
+                        timer.start();
                         updateDist(u, v, w);
                         if(getDist(v) < B) {
                             root[v] = root[u];
                             nw_active.push_back(v);
                         }
+                        timer.stop();
+                        stats.snip_relaxation += timer.elapsed_ms();
                     }
                 }
             }
@@ -584,7 +588,7 @@ private:
             active = move(nw_active);
         }
 
-        timerT timer;
+        timer.start();
         std::vector<int> P;
         P.reserve(vis.size() / k);
         for(int u: vis) treesz[root[u]]++;

@@ -5,9 +5,10 @@
 
 namespace spp_ml_theory {
 
-inline double acc_bound = 1.0;
-inline double acc_pivot = 1.0;
-inline double acc_insert = 1.0;
+inline double acc_bound = 0;
+inline double acc_pivot = 0;
+inline double acc_ps_case = 1.0;
+inline double acc_insert = 0;
 inline double use_bound_pred = true;
 
 void set_acc_bound(double x){
@@ -24,6 +25,10 @@ void set_acc_insert(double x){
 
 void set_use_bound_pred(bool x){
     use_bound_pred = x;
+}
+
+void set_acc_ps_case(double x){
+    acc_ps_case = x;
 }
 
 template<typename uniqueDistT>
@@ -104,9 +109,13 @@ public:
         
         // Searching for the first block with UB which is > 
         timer.start();
+        int r = randomBit(acc_insert);
+        timer.stop();
+        insert_offset += timer.elapsed_ms();
+
+        timer.start();
         auto it_UB_block = UBs.lower_bound({b,it_min});
         auto [ub,it_block] = (*it_UB_block);
-        int r = randomBit(acc_insert);
         timer.stop();
         if (r) {
             insert_offset += timer.elapsed_ms();
@@ -206,20 +215,30 @@ private:
             where_is1.erase(a);
     
             if((*it_block).size() == 0){
-                timer.stop();
-                if (time_delete) snip_deletion += timer.elapsed_ms();
-                timer.start();
+                using UBIter = decltype(UBs.lower_bound({b, it_block}));
+                UBIter it_UB_block;
+                if (time_delete) {
+                    timer.stop();
+                    snip_deletion += timer.elapsed_ms();
 
-                auto it_UB_block = UBs.lower_bound({b,it_block});  
-                int r = randomBit(acc_insert);
-                timer.stop();
-                if (r) {
+                    timer.start();
+                    int r = randomBit(acc_insert);
+                    timer.stop();
                     insert_offset += timer.elapsed_ms();
-                } else {
-                    snip_lower_bound += timer.elapsed_ms();
-                }
 
-                timer.start();
+                    timer.start();
+                    it_UB_block = UBs.lower_bound({b,it_block});  
+                    timer.stop();
+                    if (r) {
+                        insert_offset += timer.elapsed_ms();
+                    } else {
+                        snip_lower_bound += timer.elapsed_ms();
+                    }
+
+                    timer.start();
+                } else {
+                    it_UB_block = UBs.lower_bound({b,it_block});  
+                }
                 if((*it_UB_block).first != B){
                     UBs.erase(it_UB_block);
                     D1.erase(it_block);
@@ -282,9 +301,13 @@ private:
 
 
         timer.start();
+        int r = randomBit(acc_insert);
+        timer.stop();
+        insert_offset += timer.elapsed_ms();
+
+        timer.start();
         auto it_lb = UBs.lower_bound({UB1,it_min});
         auto [UB2,aux] = (*it_lb);
-        int r = randomBit(acc_insert);
         timer.stop();
         if (r) {
             insert_offset += timer.elapsed_ms();
@@ -366,6 +389,7 @@ class bmssp {
     std::vector<int> node_map, node_rev_map;
     
     bool cd_transfomed;
+    double pivot_offset;
 
 public:
     Stats stats;
@@ -600,6 +624,28 @@ private:
             pivot_vis[x] = counter_pivot;
         }
 
+        // snapshot
+        timerT timer2;
+        auto old_pred = pred;
+        auto old_d = d;
+        auto old_path_sz = path_sz;
+        auto old_counter_pivot = counter_pivot;
+        auto old_pivot_vis = pivot_vis;
+        auto old_root = root;
+        auto old_treesz = treesz;
+        auto old_stats = stats;
+
+        auto restore = [&]() {
+            pred = std::move(old_pred);
+            d = std::move(old_d);
+            path_sz = std::move(old_path_sz);
+            counter_pivot = old_counter_pivot;
+            pivot_vis = std::move(old_pivot_vis);
+            root = std::move(old_root);
+            treesz = std::move(old_treesz);
+            stats = std::move(old_stats);
+        };
+
         std::vector<int> active = S;
         for(int x: S) root[x] = x, treesz[x] = 0;
         for(int i = 1; i <= k; i++) {
@@ -626,6 +672,16 @@ private:
                 }
             }
             if(vis.size() > k * S.size()) {
+                timer.start();
+                int r = randomBit(acc_ps_case);
+                timer.stop();
+                pivot_offset += timer.elapsed_ms();
+                if (r) {
+                    restore();
+                    timer2.stop();
+                    pivot_offset += timer2.elapsed_ms();
+                    return {S, S};
+                }
                 return {S, vis};
             }
             active = move(nw_active);
@@ -685,6 +741,8 @@ private:
             stats.time_base_case += timer.elapsed_ms();
             return x;
         }
+
+        pivot_offset = 0;
 
         timerT timer;
         auto [P, bellman_vis] = findPivots(B, S);
@@ -768,8 +826,9 @@ private:
         stats.snip_membership_check += D.snip_membership_check;
         stats.snip_deletion += D.snip_deletion;
 
-        stats.time_full -= D.insert_offset;
         stats.time_D_op -= D.insert_offset;
+        stats.time_find_pivot -= pivot_offset;
+        stats.time_full -= D.insert_offset + pivot_offset;
         
         return {retB, complete};
     }

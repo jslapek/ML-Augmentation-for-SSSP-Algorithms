@@ -131,7 +131,7 @@ plot_mean_times <- function() {
     theme_minimal()
     
 
-  ggsave(filename = "figures/plot.pdf", plot = plt, width = 8, height = 6)
+  ggsave(filename = "figures/time_components_bmssp.pdf", plot = plt, width = 8, height = 6)
 }
 
 plot_d_insert_times <- function() {
@@ -206,7 +206,7 @@ plot_d_insert_times <- function() {
     theme_minimal()
     
 
-  ggsave(filename = "figures/plot.pdf", plot = plt, width = 8, height = 6)
+  ggsave(filename = "figures/time_components_insert.pdf", plot = plt, width = 8, height = 6)
 }
 
 plot_pivot <- function() {
@@ -276,7 +276,7 @@ plot_pivot <- function() {
     theme_minimal()
     
 
-  ggsave(filename = "figures/plot.pdf", plot = plt, width = 8, height = 6)
+  ggsave(filename = "figures/time_components_pivot.pdf", plot = plt, width = 8, height = 6)
 }
 
 ######### Main ##########
@@ -288,8 +288,8 @@ plot_pivot <- function() {
 runSearch()
 
 ### plot results
-# plot_mean_times()
-# plot_d_insert_times()
+plot_mean_times()
+plot_d_insert_times()
 plot_pivot()
 
 

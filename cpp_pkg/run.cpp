@@ -73,7 +73,7 @@ std::string runSearch() {
   size_t i = 0;
   json jout = json::object();
   for (auto [dir, gs] : graphs) {
-    if (++i >= 10) break;
+    if (++i >= 14) break;
     json& dir_bucket = jout[std::to_string(dir)];
 
     std::cout << "Processing directory: " << dir << " with " << gs.size() << " graphs.\n";
@@ -82,11 +82,11 @@ std::string runSearch() {
       auto [adj, m] = readGraph<distT>(gs[i]);
 
       spp::dijkstra<distT> dijkstra(adj);
-      auto [d_d, p_d] = dijkstra.execute(0);
-      distT max_dist = *std::max_element(d_d.begin(), d_d.end());
-      std::cout << "maximum distance: " << max_dist << "\n";
+      // auto [d_d, p_d] = dijkstra.execute(0);
+      // distT max_dist = *std::max_element(d_d.begin(), d_d.end());
+      // std::cout << "maximum distance: " << max_dist << "\n";
 
-      spp_ml_theory::bmssp<distT> bmssp(adj);
+      spp_timed::bmssp<distT> bmssp(adj);
       bmssp.prepare_graph(false);
       int source = 0;
 
