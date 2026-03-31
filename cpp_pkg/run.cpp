@@ -7,6 +7,7 @@ using namespace Rcpp;
 #include "algs/bmssp.hpp"
 #include "algs/bmssp_timed.hpp"
 #include "algs/bmssp_ml_theory.hpp"
+#include "algs/bmssp_timed_theory.hpp"
 #include "algs/dijkstra.hpp"
 
 #include <fstream>
@@ -86,7 +87,7 @@ std::string runSearch() {
       // distT max_dist = *std::max_element(d_d.begin(), d_d.end());
       // std::cout << "maximum distance: " << max_dist << "\n";
 
-      spp_timed::bmssp<distT> bmssp(adj);
+      spp_timed_theory::bmssp<distT> bmssp(adj);
       bmssp.prepare_graph(false);
       int source = 0;
 
