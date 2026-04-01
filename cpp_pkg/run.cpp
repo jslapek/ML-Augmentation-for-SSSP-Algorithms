@@ -7,11 +7,15 @@ using namespace Rcpp;
 #include "algs/bmssp.hpp"
 #include "algs/bmssp_timed.hpp"
 #include "algs/bmssp_ml_theory.hpp"
-#include "algs/bmssp_timed_theory.hpp"
+#include "algs/bmssp_timed_ppred.hpp"
+#include "algs/bmssp_timed_cpred.hpp"
+#include "algs/bmssp_bounded (unoptimised).hpp"
+#include "algs/bmssp_bounded (optimised).hpp"
 #include "algs/dijkstra.hpp"
 
 #include <fstream>
 #include <iostream>
+#include <vector>
 #include <json.hpp>
 #include <filesystem>
 using json = nlohmann::json;
@@ -74,30 +78,44 @@ std::string runSearch() {
   size_t i = 0;
   json jout = json::object();
   for (auto [dir, gs] : graphs) {
-    if (++i >= 14) break;
+    if (++i >= 16) break;
     json& dir_bucket = jout[std::to_string(dir)];
 
     std::cout << "Processing directory: " << dir << " with " << gs.size() << " graphs.\n";
     for (std::size_t i = 0; i < gs.size(); ++i) {
-      std::cout << "Processing graph: " << fs::path(gs[i]).filename().string() << "\n";
+      std::cout << "\nProcessing graph: " << fs::path(gs[i]).filename().string() << "\n";
       auto [adj, m] = readGraph<distT>(gs[i]);
 
       spp::dijkstra<distT> dijkstra(adj);
-      // auto [d_d, p_d] = dijkstra.execute(0);
-      // distT max_dist = *std::max_element(d_d.begin(), d_d.end());
-      // std::cout << "maximum distance: " << max_dist << "\n";
+      timerT timer;
+      auto [d_d, p_d] = dijkstra.execute(0);
+      timer.stop();
+      std::cout << "Dijkstra time: " << timer.elapsed_ms() << "ms\n";
+      distT max_dist = *std::max_element(d_d.begin(), d_d.end());
 
-      spp_timed_theory::bmssp<distT> bmssp(adj);
+      spp_bounded_opt::bmssp<distT> bmssp(adj);
       bmssp.prepare_graph(false);
       int source = 0;
-
-      timerT timer;
+      bmssp.set_threshold_schedule({max_dist + 1});
+      // bmssp.set_threshold_schedule({bmssp.oo});
+      timer.start();
       auto [d, p] = bmssp.execute(source);
       timer.stop();
       bmssp.stats.update_time_full(timer.elapsed_ms());
+      std::cout << "BMSSP time: " << bmssp.stats.time_full << "ms\n";
 
       dir_bucket[fs::path(gs[i]).filename().string()] = bmssp.stats;
-      std::cout << bmssp.stats.time_full << "ms\n";
+
+    //   for (std::size_t i = 0; i < d.size() && i < d_d.size(); ++i) {
+    //     if (d[i] != d_d[i]) {
+    //         std::cout << "Distance mismatch vertex " << d[i] << ": " << d_d[i] << "\n";
+    //     }
+    //   }
+      for (std::size_t i = 0; i < 5; ++i) {
+        std::cout << "d[" << i << "] = " << d[i] << "\n";
+        std::cout << "d_d[" << i << "] = " << d_d[i] << "\n";
+      }
+
     }
   }
   std::ofstream out("experiments/run_stats.json");
