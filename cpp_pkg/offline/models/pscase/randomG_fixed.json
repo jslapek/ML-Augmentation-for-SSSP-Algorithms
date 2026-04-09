@@ -1,0 +1,15 @@
+{
+  "threshold": 0.00034464061727600495,
+  "n_examples": 78000,
+  "n_positives": 2000,
+  "n_negatives": 76000,
+  "n_predicted_positives": 3000,
+  "n_predicted_negatives": 75000,
+  "accuracy": 0.9871794871794872,
+  "precision": 0.6666666666666666,
+  "recall": 1.0,
+  "f1": 0.8,
+  "positive_rate": 0.02564102564102564,
+  "precision_lift_over_base_rate": 26.0,
+  "pr_auc": 1.0
+}

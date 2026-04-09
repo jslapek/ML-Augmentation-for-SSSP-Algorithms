@@ -1,0 +1,17 @@
+{
+  "n_examples": 1000,
+  "target_max_dist_mean": 20.284,
+  "prediction_max_dist_mean": 19.762558933258056,
+  "prediction_bound_mean": 20.762558933258056,
+  "mae_vs_max_dist": 3.2285211143493653,
+  "rmse_vs_max_dist": 4.354554132365721,
+  "mean_relative_error_vs_max_dist": 0.16472917472880186,
+  "median_absolute_error_vs_max_dist": 2.437227249145508,
+  "mean_signed_error_vs_max_dist": -0.5214410667419433,
+  "mean_bound_gap_vs_max_dist": 0.47855893325805665,
+  "safe_rate_vs_max_dist": 0.597,
+  "underprediction_rate_vs_max_dist": 0.519,
+  "within_1pct_rate": 0.053,
+  "within_5pct_rate": 0.228,
+  "pred_log_mean_mean": 3.0246573746204377
+}

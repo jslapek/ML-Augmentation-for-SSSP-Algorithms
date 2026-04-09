@@ -1,0 +1,20 @@
+{
+  "threshold": 0.005363766006843148,
+  "max_predicted_fraction": 0.2,
+  "max_train_examples": 200000,
+  "train_mode": "logistic",
+  "n_examples": 1699704,
+  "n_positives": 118899,
+  "n_predicted_positives": 301403,
+  "accuracy": 0.8917070266352259,
+  "precision": 0.39189390948331637,
+  "recall": 0.9934313997594597,
+  "f1": 0.5620625169520963,
+  "weighted_precision_mass": 0.6295259444021094,
+  "weighted_positive_mass_recall": 0.9957031874420538,
+  "pr_auc_weighted": 0.9573808168894805,
+  "label_key": "pivot_label",
+  "weight_key": "final_f_s",
+  "skip_ps_case": true,
+  "prefix_round": 2
+}
