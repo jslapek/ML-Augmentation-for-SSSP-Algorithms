@@ -1,40 +1,292 @@
-# ML-Augmentation-for-SSSP-Algorithms
+# ML-Augmentation for SSSP Algorithms
 
-## Running Single Experiment
+Research code for experimenting with machine-learning-inspired augmentations to **single-source shortest path (SSSP)** algorithms, with a focus on **BMSSP-style methods**, benchmark sweeps, and performance analysis.
 
-To plot a single run of an algorithm, look towards the runSearch() function in run.cpp.
+This repository is best understood as an **experimental research workspace** rather than a polished library. The core implementations live in C++, experiments are orchestrated from R, and a smaller Python package is included for prototyping and comparison.
 
-There, you will see a line that looks like follows:
+---
 
-// pscase_type = ["randomD", "randomE", "randomG", "randomH", "randomT", "RD", "RF", "mix_real", "mix_gen", "mix_all"]
-// pscase_predictor = ["false", "online", "offline", "blank"]
-// frontier = ["bpq", "lapq"]
-// countmin_predictor = ["false", "dedup", "ob", "npf", "hybrid"]
-// countmin_type = ["false", "online", "offline", "blank"]
-// BF_steps = int
-spp_bmsspf::bmssp<distT> bmssp(adj, "randomT", "offline", "bpq", "ob", "online", 0);
+## What this repository contains
 
-This is the bmssp framework produced in this work, and there are 6 parameters that you may alter.
+This project combines:
 
-If you wish to run a different algorithm, change the first phrase preceded by "::". The most basic example includes:
+- **C++ implementations** of shortest-path algorithms and experimental variants
+- **R analysis scripts** for compiling the C++ code, running experiment suites, and generating plots/tables
+- **Python prototypes** for lightweight algorithm experimentation
+- **Graph generation utilities** and graph-family datasets
+- **Saved experiment outputs** including JSON results, PDF figures, and TSV summary tables
 
-spp_timed::bmssp<distT> bmssp(adj); -- This is the base version of bmssp.
+---
 
-To run a *bounded* bmssp, you must insert a threshold schedule. This can be seen below, where max_dist is the maximum distance fetched from a dijkstra run ahead of time.
-spp_bounded_opt_k::bmssp(adj);
-alg.set_threshold_schedule({max_dist + 1, oo});
+## Repository structure
 
-To see how to run any of the algorithms in the "algs" directory, just look at the the namespace value, and replace "spp..." with it, as seen above.
-The only exception is bmsspf, which requires parameters to be passed in at initilaisation.
+```text
+.
+├── cpp_pkg/                # Main C++ implementations and Rcpp entrypoints
+│   ├── algs/
+│   ├── offline/
+│   ├── online/
+│   ├── structures/
+│   ├── common.hpp
+│   ├── grid-generator.cpp
+│   ├── hamiltonian-random-graph-generator.cpp
+│   ├── random-graph-generator.cpp
+│   └── run.cpp
+├── py_pkg/                 # Python prototype implementations
+│   ├── algorithms.py
+│   ├── frontier.py
+│   ├── graph.py
+│   ├── heaps.py
+│   ├── load_data.py
+│   └── run.py
+├── scripts/                # Helper scripts for graph generation / preprocessing
+├── graphs/                 # Graph families and graph utilities
+├── experiments/            # Raw experiment outputs (JSON)
+├── figures/                # Generated plots (PDF)
+├── tables/                 # Generated summary tables
+├── analysis.R              # Main experiment driver
+└── run_class.json          # Runtime configuration for C++ runs
+```
 
-The algorithm can then be executed by running "analysis.R". (Ensure that runSearch() is being called first).
+---
 
-run.cpp can also be compiled directly and ran itself, and you can manually change the graph family being used as input in 'run_class.json'.
+## Project goals
 
-## Running Batch Experiments
+The repository is set up to support experiments such as:
 
-Batch experiments can be ran via analysis.R with the various functions that begin with "exp". Calling these in the main file will execute them.
+- timing and profiling runs for BMSSP variants
+- global and bounded shortest-path experiment suites
+- BMSSPF configuration sweeps
+- comparisons across synthetic graph families
+- generation of publication-style figures and summary tables
 
-## Plotting Results
+---
 
-As with running batch experiments, any of the plot functions can be ran, and they will plot any results in the "experiments" directory into the "figures" directory.
+## Core workflow
+
+The main workflow is:
+
+1. Choose or generate a graph family.
+2. Edit `run_class.json` or write a config from `analysis.R`.
+3. Run `analysis.R`.
+4. Compile the C++ entrypoints with `Rcpp::sourceCpp(...)`.
+5. Launch an experiment through one of the exported runners.
+6. Inspect raw outputs in `experiments/`.
+7. Generate figures and tables in `figures/` and `tables/`.
+
+---
+
+## Requirements
+
+You will need:
+
+- **R**
+- **A C++ compiler with C++20 support** compatible with `Rcpp`
+- **Python** for the `reticulate` / `py_pkg` workflow
+
+### R packages
+
+The main R workflow depends on:
+
+- `reticulate`
+- `jsonlite`
+- `scales`
+- `ggplot2`
+- `dplyr`
+- `tidyr`
+- `Rcpp`
+
+---
+
+## Important setup notes
+
+This codebase currently reflects a **local research-machine setup**.
+
+Before running experiments on a new machine, you will likely need to update:
+
+- the Python interpreter path in `analysis.R`
+- the graph root directory used by the C++ runners
+- any local input/output paths you want to standardise
+
+As written, the repository includes machine-specific Windows paths, so it is **not fully portable out of the box**.
+
+---
+
+## Configuration
+
+The main runtime configuration is stored in `run_class.json`.
+
+Example:
+
+```json
+{
+  "alg": "bmssp",
+  "heap": "binary",
+  "frontier": "block",
+  "graph": "randomT",
+  "seed": 42,
+  "n": 1000,
+  "m": 4000,
+  "transform": false,
+  "transform_delta": 4,
+  "niters": 10,
+  "nsources": 1
+}
+```
+
+### Config fields
+
+| Field | Description |
+|---|---|
+| `alg` | Algorithm family to run |
+| `heap` | Priority queue implementation |
+| `frontier` | Frontier structure |
+| `graph` | Graph family or dataset name |
+| `seed` | Random seed |
+| `n` | Number of vertices |
+| `m` | Number of edges |
+| `transform` | Whether to apply the graph transform |
+| `transform_delta` | Transform parameter |
+| `niters` | Number of repeated runs |
+| `nsources` | Number of source vertices |
+
+---
+
+## Running a single experiment
+
+The default analysis script is configured to run a single experiment through `runSearch()`.
+
+### Basic R workflow
+
+```r
+cfg <- default_cfg
+cfg$graph <- "randomD"
+
+write_cfg(cfg = cfg)
+runSearch()
+```
+
+This writes results to the `experiments/` directory.
+
+### Optional plotting
+
+```r
+plot_mean_times()
+plot_d_insert_times()
+plot_pivot()
+```
+
+---
+
+## Running batch experiments
+
+The repository includes helper functions for larger experiment suites.
+
+### Random timed experiments
+
+```r
+exp_random_timed()
+plot_random_timed()
+```
+
+### Global timed experiments
+
+```r
+exp_global_timed()
+```
+
+### Mixed / 5k experiments
+
+```r
+exp_5k_ml()
+```
+
+### BMSSPF configuration sweep
+
+```r
+exp_bmsspf_comb()
+table_bmsspf_comb()
+plot_all_bmsspf()
+```
+
+---
+
+## Output artifacts
+
+The main outputs generated by the pipeline are:
+
+- **JSON** experiment results in `experiments/`
+- **PDF** plots in `figures/`
+- **TSV** summary tables in `tables/`
+
+These outputs make it easier to compare algorithm variants, inspect timing behaviour, and summarise the best-performing configurations.
+
+---
+
+## Python prototype
+
+The `py_pkg/` directory contains a smaller Python implementation for prototyping and quick experimentation.
+
+It includes implementations of:
+
+- `BMSSP`
+- `Dijkstra`
+- `BellmanFord`
+
+along with multiple heap and frontier options.
+
+The Python code is useful for exploration and debugging, while the main experiment pipeline lives in the **C++ + R** workflow.
+
+---
+
+## Notes on portability
+
+A few parts of the repository still assume a personal development environment. In particular:
+
+- `analysis.R` sets a machine-specific Python path
+- C++ runners read graph families from a hard-coded local directory
+- some experiment helpers assume existing folders and prior outputs
+
+If you want to make this repository easier for others to run, a good next step would be to:
+
+1. replace hard-coded paths with environment variables or relative paths
+2. add a reproducible setup section for graph data
+3. document expected input graph formats
+4. add a one-command example for a fresh clone
+
+---
+
+## Suggested checklist
+
+If you are opening this repo for the first time:
+
+1. Install the required R packages.
+2. Update the Python path in `analysis.R`.
+3. Update the graph root path in the C++ runner.
+4. Confirm `run_class.json` points to a graph family you actually have locally.
+5. Run `analysis.R` with `runSearch()` enabled.
+6. Inspect outputs under `experiments/` and generate plots as needed.
+
+---
+
+## Current status
+
+This repository contains the working code and analysis pipeline behind a third-year research project.
+
+It is strongest as:
+
+- a reproducible record of experiments
+- a codebase for testing shortest-path variants
+- a source of figures and summary tables for analysis
+
+It is less polished as:
+
+- a plug-and-play package
+- a portable benchmark suite
+- an end-user library
+
+---
+
+## Acknowledgment
+
+Originally developed as a third-year project at the University of Warwick focused on shortest-path algorithms and experimental augmentation strategies.
