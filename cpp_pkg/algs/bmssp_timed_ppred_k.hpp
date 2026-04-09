@@ -1,11 +1,15 @@
 #include "bmssp.hpp"
 #include "utils.hpp"
 
-// https://chatgpt.com/c/69a9555d-1040-838e-9b5b-93d97750488b
+namespace spp_timed_ppred_k {
 
-#include "../structures/alex_map.h"
+inline bool pointer_pred = true;
 
-namespace spp_learned_index {
+void set_pointer_pred(bool x){
+    pointer_pred = x;
+}
+
+
 
 template<typename uniqueDistT>
 class batchPQ { // batch priority queue
@@ -33,6 +37,13 @@ class batchPQ { // batch priority queue
     hash_map<int, std::pair<typename std::list<std::list<elementT>>::iterator, typename std::list<elementT>::iterator>> where_is0, where_is1;
     
 public:
+    double snip_split = 0.0;
+    double snip_lower_bound = 0.0;
+    double snip_block_insertion = 0.0;
+    double snip_membership_check = 0.0;
+    double snip_deletion = 0.0;
+    double offset_insert = 0.0;
+    bool time_delete = false;
 
     batchPQ(int n): actual_value(n), where_is0(n), where_is1(n){} // O(n)
 
@@ -42,6 +53,13 @@ public:
         D1 = {std::list<elementT>()};
         UBs = {make_pair(B_,D1.begin())};
         size_ = 0;
+        snip_split = 0.0;
+        snip_lower_bound = 0.0;
+        snip_block_insertion = 0.0;
+        snip_membership_check = 0.0;
+        snip_deletion = 0.0;
+        offset_insert = 0.0;
+        time_delete = false;
 
         actual_value.clear();
         where_is0.clear(); where_is1.clear();
@@ -56,23 +74,37 @@ public:
         int a = get<2>(b);
     
         // checking if exists
+        timerT timer;
         auto it_exist = actual_value.find(a);
         int exist = (it_exist != actual_value.end()); 
+        timer.stop();
+        snip_membership_check += timer.elapsed_ms();
     
         if(exist && it_exist->second > b){
+            time_delete = true;
             delete_(x);
         }else if(exist){
             return;
         }
         
         // Searching for the first block with UB which is > 
+        timer.start();
         auto it_UB_block = UBs.lower_bound({b,it_min});
         auto [ub,it_block] = (*it_UB_block);
+        timer.stop();
+        if (pointer_pred) {
+            offset_insert += timer.elapsed_ms();
+        } else {
+            snip_lower_bound += timer.elapsed_ms();
+        }
         
         // Inserting key/value (a,b)
+        timer.start();
         auto it = it_block->insert(it_block->end(),{a,b});
         where_is1[a] = {it_block, it};
         actual_value[a] = b;
+        timer.stop();
+        snip_block_insertion += timer.elapsed_ms();
     
         size_++;
     
@@ -91,6 +123,7 @@ public:
     }
 
     std::pair<uniqueDistT, std::vector<int>> pull(){ // O(M)
+        time_delete = false;
         std::vector<elementT> s0,s1;
         s0.reserve(2 * M); s1.reserve(M);
     
@@ -136,12 +169,15 @@ public:
         }
     }
     inline void erase(int key) {
-        if(actual_value.find(key) != actual_value.end())
+        if(actual_value.find(key) != actual_value.end()) {
+            time_delete = true;
             delete_({-1, -1, key, -1});
+        }
     }
     
 private:
     void delete_(uniqueDistT x){    
+        timerT timer;
         int a = get<2>(x);
         uniqueDistT b = actual_value[a];
         
@@ -153,8 +189,20 @@ private:
             where_is1.erase(a);
     
             if((*it_block).size() == 0){
+                timer.stop();
+                if (time_delete) snip_deletion += timer.elapsed_ms();
+                timer.start();
                 auto it_UB_block = UBs.lower_bound({b,it_block});  
-                
+                timer.stop();
+                if (time_delete) {
+                    if (pointer_pred) {
+                        offset_insert += timer.elapsed_ms();
+                    } else {
+                        snip_lower_bound += timer.elapsed_ms();
+                    }
+                }
+
+                timer.start();
                 if((*it_UB_block).first != B){
                     UBs.erase(it_UB_block);
                     D1.erase(it_block);
@@ -169,6 +217,8 @@ private:
     
         actual_value.erase(a);
         size_--;
+        timer.stop();
+        if (time_delete) snip_deletion += timer.elapsed_ms();
     }
     
     uniqueDistT selectKth(std::vector<elementT> &v, int k) {
@@ -181,6 +231,7 @@ private:
 
         
     void split(std::list<std::list<elementT>>::iterator it_block){ // O(M) + O(lg(Block Numbers))
+        timerT timer;
         int sz = (*it_block).size();
         
         std::vector<elementT> v((*it_block).begin() , (*it_block).end());
@@ -208,13 +259,28 @@ private:
         // Updating UBs   
         // O(lg(Block Numbers))
         uniqueDistT UB1 = {get<0>(med),get<1>(med),get<2>(med),get<3>(med)-1};
+        timer.stop();
+        snip_split += timer.elapsed_ms();
+
+        timer.start();
         auto it_lb = UBs.lower_bound({UB1,it_min});
         auto [UB2,aux] = (*it_lb);
+        timer.stop();
+        if (pointer_pred) {
+            offset_insert += timer.elapsed_ms();
+        } else {
+            snip_lower_bound += timer.elapsed_ms();
+        }
+
         
+        timer.start();
         UBs.insert({UB1,it_block});
         UBs.insert({UB2,new_block});
         
         UBs.erase(it_lb);
+        timer.stop();
+        snip_split += timer.elapsed_ms();
+
     }
     
     void batchPrepend(const std::list<elementT> &l) { // O(|l| log(|l|/M) ) 
@@ -231,6 +297,7 @@ private:
                 int exist = (it != actual_value.end()); 
     
                 if(exist && it->second > x.second){
+                    time_delete = false;
                     delete_(x.second);
                 }else if(exist){
                     continue;
@@ -265,10 +332,32 @@ private:
     }
 };
 
+//////////////////////////////////////////////////////
+
 template<typename wT>
 class bmssp { 
     // Base Attributes
     int n, k, t, l;
+
+    static inline double log2_vertices(std::size_t vertex_count) {
+        return std::max(1.0, std::log2(std::max<std::size_t>(vertex_count, 2)));
+    }
+
+    // Perfect-prediction regime from the appendix: for accuracy a = 1,
+    // the capped equilibrium choice is k = Theta(sqrt(log n)).
+    static inline int tuned_k_perfect_prediction(std::size_t vertex_count) {
+        const double L = log2_vertices(vertex_count);
+        return std::max(1, static_cast<int>(std::floor(std::sqrt(L))));
+    }
+
+    static inline int tuned_t_from_k(int tuned_k) {
+        return std::max(1, tuned_k * tuned_k);
+    }
+
+    static inline int tuned_levels(std::size_t vertex_count, int tuned_t) {
+        const double L = log2_vertices(vertex_count);
+        return std::max(1, static_cast<int>(std::ceil(L / tuned_t)));
+    }
 
     std::vector<std::vector<std::pair<int, wT>>> ori_adj;
     std::vector<std::vector<std::pair<int, wT>>> adj;
@@ -326,8 +415,6 @@ public:
                 node_rev_map[i] = i;
             }
 
-            k = floor(pow(log2(n), 1.0 / 3.0));
-            t = floor(pow(log2(n), 2.0 / 3.0));
         } else { // Make the graph become constant degree
             int cnt = 0;
             std::vector<std::map<int, int>> edge_id(n);
@@ -375,9 +462,9 @@ public:
         path_sz.resize(adj.size(), 0);
         last_complete_lvl.resize(adj.size());
         pivot_vis.resize(adj.size());
-        k = floor(pow(log2(adj.size()), 1.0 / 3.0));
-        t = floor(pow(log2(adj.size()), 2.0 / 3.0));
-        l = ceil(log2(adj.size()) / t);
+        k = tuned_k_perfect_prediction(adj.size());
+        t = tuned_t_from_k(k);
+        l = tuned_levels(adj.size(), t);
         Ds.assign(l, adj.size());
     }
 
@@ -392,11 +479,11 @@ public:
         d[s] = 0;
         path_sz[s] = 0;
         
-        const int l = ceil(log2(adj.size()) / t);
+        const int top_level = l;
         const uniqueDistT inf_dist = {oo, 0, 0, 0};
         timer.stop();
         stats.time_full -= timer.elapsed_ms();
-        bmsspRec(l, inf_dist, {s});
+        bmsspRec(top_level, inf_dist, {s});
         
         if(!cd_transfomed) {
             return {d, pred};
@@ -501,6 +588,7 @@ private:
     int counter_pivot = 0;
     std::vector<int> pivot_vis;
     std::pair<std::vector<int>, std::vector<int>> findPivots(uniqueDistT B, const std::vector<int> &S) { // Algorithm 1
+        timerT timer;
         counter_pivot++;
 
         std::vector<int> vis;
@@ -519,11 +607,14 @@ private:
             for(int u: active) {
                 for(auto [v, w]: adj[u]) {
                     if(getDist(u, v, w) <= getDist(v)) {
+                        timer.start();
                         updateDist(u, v, w);
                         if(getDist(v) < B) {
                             root[v] = root[u];
                             nw_active.push_back(v);
                         }
+                        timer.stop();
+                        stats.snip_relaxation += timer.elapsed_ms();
                     }
                 }
             }
@@ -539,10 +630,13 @@ private:
             active = move(nw_active);
         }
 
+        timer.start();
         std::vector<int> P;
         P.reserve(vis.size() / k);
         for(int u: vis) treesz[root[u]]++;
         for(int u: S) if(treesz[u] >= k) P.push_back(u);
+        timer.stop();
+        stats.snip_tree_construction += timer.elapsed_ms();
         
         // assert(P.size() <= vis.size() / k);
         return {P, vis};
@@ -666,6 +760,15 @@ private:
             complete.push_back(x); // this get the completed vertices from bellman-ford, it has P in it as well
         }
         // get only the ones not in complete already, for it to become disjoint
+        stats.snip_lower_bound += D.snip_lower_bound;
+        stats.snip_split += D.snip_split;
+        stats.snip_block_insertion += D.snip_block_insertion;
+        stats.snip_membership_check += D.snip_membership_check;
+        stats.snip_deletion += D.snip_deletion;
+
+        stats.time_D_op -= D.offset_insert;
+        stats.time_full -= D.offset_insert;
+        
         return {retB, complete};
     }
 };

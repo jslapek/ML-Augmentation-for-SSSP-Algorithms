@@ -17,6 +17,7 @@ struct timerT {
 };
 
 struct Stats {
+  double time_dijkstra = 0.0;
   double time_full = 0;
   double time_find_pivot = 0;
   double time_base_case = 0;

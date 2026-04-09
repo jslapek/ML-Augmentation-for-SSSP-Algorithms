@@ -2,11 +2,27 @@
 #include "utils.hpp"
 
 
-namespace spp_timed_cpred {
+namespace spp_timed_cpred_dedup {
 
-inline bool pred_c = true;
+inline bool pred_c = false;
+inline bool pred_pivots = true;
+inline bool local_search = false; // breaks correctness when false if BF_steps != -1
+inline int BF_steps = -1;
+
 void set_pred_c(bool x){
     pred_c = x;
+}
+
+void set_pred_pivots(bool x){
+    pred_pivots = x;
+}
+
+void set_local_search(bool x){
+    local_search = x;
+}
+
+void set_BF_steps(int x){
+    BF_steps = x;
 }
 
 template<typename uniqueDistT>
@@ -426,7 +442,20 @@ public:
         path_sz.resize(adj.size(), 0);
         last_complete_lvl.resize(adj.size());
         pivot_vis.resize(adj.size());
+        round_seen_stamp.assign(adj.size(), 0);
+        pivot_member_stamp.assign(adj.size(), 0);
+        local_dist_val.resize(adj.size());
+        local_dist_stamp.assign(adj.size(), 0);
+        local_owner_val.assign(adj.size(), 0);
+        local_owner_stamp.assign(adj.size(), 0);
+        cand_dist_val.resize(adj.size());
+        cand_dist_stamp.assign(adj.size(), 0);
+        cand_owner_val.assign(adj.size(), 0);
+        owner_count_val.assign(adj.size(), 0);
+        owner_count_stamp.assign(adj.size(), 0);
+        scratch_touched_targets.clear();
         k = floor(pow(log2(adj.size()), 1.0 / 3.0));
+        if (BF_steps == -1) { BF_steps = k; }
         t = floor(pow(log2(adj.size()), 2.0 / 3.0));
         l = ceil(log2(adj.size()) / t);
         Ds.assign(l, adj.size());
@@ -437,11 +466,15 @@ public:
         fill(d.begin(), d.end(), oo);
         fill(last_complete_lvl.begin(), last_complete_lvl.end(), -1);
         fill(pivot_vis.begin(), pivot_vis.end(), -1);
-        for(int i = 0; i < pred.size(); i++) pred[i] = i;
+        fill(path_sz.begin(), path_sz.end(), 0);
+        fill(root.begin(), root.end(), -1);
+        fill(treesz.begin(), treesz.end(), 0);
+        for(int i = 0; i < (int)pred.size(); i++) pred[i] = i;
         
         s = toAnyCustomNode(s);
         d[s] = 0;
         path_sz[s] = 0;
+        pred[s] = s;
         
         const int l = ceil(log2(adj.size()) / t);
         const uniqueDistT inf_dist = {oo, 0, 0, 0};
@@ -543,6 +576,74 @@ private:
         pred[v] = u;
         d[v] = d[u] + w;
         path_sz[v] = path_sz[u] + 1;
+    }
+
+    std::vector<uniqueDistT> local_dist_val;
+    std::vector<int> local_dist_stamp;
+    std::vector<int> local_owner_val;
+    std::vector<int> local_owner_stamp;
+    std::vector<uniqueDistT> cand_dist_val;
+    std::vector<int> cand_dist_stamp;
+    std::vector<int> cand_owner_val;
+    std::vector<int> owner_count_val;
+    std::vector<int> owner_count_stamp;
+
+    std::vector<int> round_seen_stamp;
+    std::vector<int> pivot_member_stamp;
+    std::vector<int> scratch_touched_targets;
+
+    int local_state_token = 0;
+    int cand_token = 0;
+    int owner_count_token = 0;
+    int round_seen_token = 0;
+    int pivot_member_token = 0;
+
+    inline void nextStamp(int &token, std::vector<int> &stamp) {
+        ++token;
+        if (token == std::numeric_limits<int>::max()) {
+            std::fill(stamp.begin(), stamp.end(), 0);
+            token = 1;
+        }
+    }
+
+    inline void nextLocalStateEpoch() {
+        ++local_state_token;
+        if (local_state_token == std::numeric_limits<int>::max()) {
+            std::fill(local_dist_stamp.begin(), local_dist_stamp.end(), 0);
+            std::fill(local_owner_stamp.begin(), local_owner_stamp.end(), 0);
+            local_state_token = 1;
+        }
+    }
+
+    inline void nextCandEpoch() {
+        ++cand_token;
+        if (cand_token == std::numeric_limits<int>::max()) {
+            std::fill(cand_dist_stamp.begin(), cand_dist_stamp.end(), 0);
+            cand_token = 1;
+        }
+    }
+
+    inline void nextOwnerCountEpoch() {
+        ++owner_count_token;
+        if (owner_count_token == std::numeric_limits<int>::max()) {
+            std::fill(owner_count_stamp.begin(), owner_count_stamp.end(), 0);
+            owner_count_token = 1;
+        }
+    }
+
+    inline uniqueDistT getLocalDistFast(int x) {
+        return (local_dist_stamp[x] == local_state_token) ? local_dist_val[x] : getDist(x);
+    }
+
+    inline int getLocalOwnerFast(int x) {
+        return (local_owner_stamp[x] == local_state_token) ? local_owner_val[x] : x;
+    }
+
+    inline void setLocalStateFast(int x, const uniqueDistT &dist, int owner) {
+        local_dist_stamp[x] = local_state_token;
+        local_dist_val[x] = dist;
+        local_owner_stamp[x] = local_state_token;
+        local_owner_val[x] = owner;
     }
 
     // ===================================================================
@@ -713,9 +814,158 @@ private:
         }
 
         timer.stop();
-        stats.snip_tree_construction += timer.elapsed_ms();
+        if (pred_pivots && !(pred_c && P == S)) {
+            stats.time_full -= timer.elapsed_ms();
+        } 
 
         return {P, vis};
+    }
+
+    
+
+    std::vector<int> relaxRoundLocal(
+        const std::vector<int> &Q,
+        uniqueDistT B,
+        std::vector<int> &vis
+    ) {
+        nextStamp(round_seen_token, round_seen_stamp);
+
+        std::vector<int> R;
+        R.reserve(Q.size() * 2 + 4);
+
+        for (int u : Q) {
+            const uniqueDistT du = getLocalDistFast(u);
+            const int owner_u = getLocalOwnerFast(u);
+
+            for (const auto &[v, w] : adj[u]) {
+                const uniqueDistT cand{get<0>(du) + w, get<1>(du) + 1, v, u};
+                const uniqueDistT curv = getLocalDistFast(v);
+
+                if (cand <= curv) {
+                    setLocalStateFast(v, cand, owner_u);
+
+                    if (cand < B) {
+                        if (round_seen_stamp[v] != round_seen_token) {
+                            round_seen_stamp[v] = round_seen_token;
+                            R.push_back(v);
+                        }
+                        if (pivot_vis[v] != counter_pivot) {
+                            pivot_vis[v] = counter_pivot;
+                            vis.push_back(v);
+                        }
+                    }
+                }
+            }
+        }
+
+        return R;
+    }
+
+
+    std::vector<int> scheduleRoundDedup(
+        const std::vector<int> &Q,
+        uniqueDistT B,
+        std::vector<int> &vis
+    ) {
+        nextCandEpoch();
+        scratch_touched_targets.clear();
+        scratch_touched_targets.reserve(Q.size() * 2 + 4);
+
+        for (int u : Q) {
+            const uniqueDistT du = getLocalDistFast(u);
+            const int owner_u = getLocalOwnerFast(u);
+
+            for (const auto &[v, w] : adj[u]) {
+                const uniqueDistT cand{get<0>(du) + w, get<1>(du) + 1, v, u};
+
+                if (cand_dist_stamp[v] != cand_token) {
+                    cand_dist_stamp[v] = cand_token;
+                    cand_dist_val[v] = getLocalDistFast(v);
+                    cand_owner_val[v] = getLocalOwnerFast(v);
+                    scratch_touched_targets.push_back(v);
+                }
+
+                if (cand < cand_dist_val[v]) {
+                    cand_dist_val[v] = cand;
+                    cand_owner_val[v] = owner_u;
+                }
+            }
+        }
+
+        std::vector<int> R;
+        R.reserve(scratch_touched_targets.size());
+
+        for (int v : scratch_touched_targets) {
+            const uniqueDistT curv = getLocalDistFast(v);
+            const uniqueDistT &best = cand_dist_val[v];
+            if (best < curv) {
+                setLocalStateFast(v, best, cand_owner_val[v]);
+                if (best < B) {
+                    R.push_back(v);
+                    if (pivot_vis[v] != counter_pivot) {
+                        pivot_vis[v] = counter_pivot;
+                        vis.push_back(v);
+                    }
+                }
+            }
+        }
+
+        return R;
+    }
+
+    std::pair<std::vector<int>, std::vector<int>> p_findPivots(
+        uniqueDistT B, const std::vector<int> &S, const std::vector<int> &pred_P
+    ) {
+        counter_pivot++;
+
+        (void)pred_P;
+        nextLocalStateEpoch();
+
+        std::vector<int> vis;
+        vis.reserve(2 * std::max<size_t>(1, static_cast<size_t>(k) * S.size()));
+
+        for (int x : S) {
+            vis.push_back(x);
+            pivot_vis[x] = counter_pivot;
+        }
+
+        std::vector<int> active = S;
+        const size_t overflow_limit = static_cast<size_t>(k) * S.size();
+        const int prefix_rounds = std::min(BF_steps, k);
+
+        for (int i = 1; i <= prefix_rounds; ++i) {
+            active = relaxRoundLocal(active, B, vis);
+            if (vis.size() > overflow_limit) {
+                return {S, vis};
+            }
+        }
+
+        for (int i = prefix_rounds + 1; i <= k; ++i) {
+            active = scheduleRoundDedup(active, B, vis);
+            if (vis.size() > overflow_limit) {
+                return {S, vis};
+            }
+        }
+
+        nextOwnerCountEpoch();
+        for (int u : vis) {
+            const int owner_u = getLocalOwnerFast(u);
+            if (owner_count_stamp[owner_u] != owner_count_token) {
+                owner_count_stamp[owner_u] = owner_count_token;
+                owner_count_val[owner_u] = 0;
+            }
+            ++owner_count_val[owner_u];
+        }
+
+        std::vector<int> P_final;
+        P_final.reserve(std::max<size_t>(4, S.size()));
+        for (int s : S) {
+            if (owner_count_stamp[s] == owner_count_token && owner_count_val[s] >= k) {
+                P_final.push_back(s);
+            }
+        }
+
+        return {P_final, vis};
     }
 
 
@@ -763,30 +1013,37 @@ private:
             return x;
         }
 
-        timerT timer;
 
         std::vector<int> P;
         std::vector<int> bellman_vis;
 
+        timerT timer;
         {
             FindPivotsUndo undo;
             auto res = findPivots(B, S, &undo);
             P = std::move(res.first);
             bellman_vis = std::move(res.second);
 
-            if (pred_c) {
-                if (P == S) {
-                    timer.start();
-                    undo.rollback(*this);
-                    bellman_vis.clear(); // discard tentative exploration
-                    timer.stop();
-                    stats.time_full -= timer.elapsed_ms();
-                } 
+            if (local_search || (pred_c && P == S)) {
+                undo.rollback(*this);
+                bellman_vis.clear(); // discard tentative exploration
+                timer.stop();
+                stats.time_full -= timer.elapsed_ms();
             }
-            // else {
-            //     stats.time_find_pivot += timer.elapsed_ms();
-            // }
-        } // undo dies here immediately
+        } 
+
+        if (!(pred_c && P == S)) {
+            if (local_search && P != S) {
+                auto [P_ls, vis_ls] = p_findPivots(B, S, P);
+                // if (P_ls != P) {
+                //     std::cout << "p_findPivots incorrect";
+                // }
+                // P = std::move(P_ls);
+                bellman_vis = std::move(vis_ls);
+            }
+        }
+
+
 
         const long long batch_size = (1ll << ((l - 1) * t));
         auto &D = Ds[l - 1];

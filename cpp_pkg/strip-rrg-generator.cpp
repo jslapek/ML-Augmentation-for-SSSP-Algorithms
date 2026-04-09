@@ -6,6 +6,7 @@ namespace {
 
 constexpr double RADIUS = 1.0;
 constexpr long long WEIGHT_SCALE = 100000LL;
+constexpr double PI = 3.141592653589793238462643383279502884;
 
 struct Point {
     double x;
@@ -14,13 +15,13 @@ struct Point {
 
 static double lost_cap_area(double d) {
     if (d >= RADIUS) return 0.0;
-    if (d <= 0.0) return M_PI * RADIUS * RADIUS / 2.0;
+    if (d <= 0.0) return PI * RADIUS * RADIUS / 2.0;
     const double x = d / RADIUS;
     return RADIUS * RADIUS * (acos(x) - x * sqrt(max(0.0, 1.0 - x * x)));
 }
 
 static double visible_disk_area(double y, double width) {
-    const double full = M_PI * RADIUS * RADIUS;
+    const double full = PI * RADIUS * RADIUS;
     return full - lost_cap_area(y) - lost_cap_area(width - y);
 }
 

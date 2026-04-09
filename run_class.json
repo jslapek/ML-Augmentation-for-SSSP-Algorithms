@@ -2,7 +2,7 @@
   "alg": "bmssp",
   "heap": "binary",
   "frontier": "block",
-  "graph": "randomD",
+  "graph": "randomT",
   "seed": 42,
   "n": 1000,
   "m": 4000,
